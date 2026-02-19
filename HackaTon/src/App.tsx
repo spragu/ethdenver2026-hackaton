@@ -1,193 +1,115 @@
-// import { useState } from 'react'
-// import reactLogo from './assets/react.svg'
-// import viteLogo from '/vite.svg'
-// import './App.css'
-
-// function App() {
-//   const [count, setCount] = useState(0)
-
-//   return (
-//     <>
-//       <div>
-//         <a href="https://vite.dev" target="_blank">
-//           <img src={viteLogo} className="logo" alt="Vite logo" />
-//         </a>
-//         <a href="https://react.dev" target="_blank">
-//           <img src={reactLogo} className="logo react" alt="React logo" />
-//         </a>
-//       </div>
-//       <h1>Vite + React</h1>
-//       <div className="card">
-//         <button onClick={() => setCount((count) => count + 1)}>
-//           count is {count}
-//         </button>
-//         <p>
-//           Edit <code>src/App.tsx</code> and save to test HMR
-//         </p>
-//       </div>
-//       <p className="read-the-docs">
-//         Click on the Vite and React logos to learn more
-//       </p>
-//     </>
-//   )
-// }
-
-// export default App
-
-
+﻿import { useState, useCallback } from "react";
 import { useAccount, useConnect, useDisconnect } from "wagmi";
-import { useQuery } from "@tanstack/react-query";
-import { fetchAttestations } from "./eas";
-import { useMemo } from "react";
-import { useQueries } from "@tanstack/react-query";
-import { fetchSchema, decodeAttestationData } from "./easDecode";
+import type { BuilderProfile, TeamListing } from "./types";
+import { loadProfile, loadTeams } from "./storage";
+import { ApplicantView } from "./views/ApplicantView";
+import { TeamOwnerView } from "./views/TeamOwnerView";
+import { useWalletName } from "./ens";
 
-type Attestation = {
-  id: string;
-  schemaId: string;
-  attester: string;
-  recipient: string;
-  time: number;
-  revoked: boolean;
-  data: `0x${string}`;
-};
+type Mode = "applicant" | "team-owner";
 
-export default function App() {
+function WalletBar() {
   const { address, isConnected, chain } = useAccount();
   const { connect, connectors, isPending, error } = useConnect();
   const { disconnect } = useDisconnect();
+  const walletName = useWalletName(address);
 
-  const { data, isLoading, isError } = useQuery({
-    queryKey: ["easAtts", address],
-    queryFn: () => fetchAttestations(address!),
-    enabled: !!address,
-  });
-
-  const atts: Attestation[] = (data as any)?.attestations ?? [];
-
-  const schemaIds = useMemo(() => [...new Set(atts.map(a => a.schemaId))], [atts]);
-
-
-  const schemaQueries = useQueries({
-    queries: schemaIds.map((id) => ({
-      queryKey: ["easSchema", id] as const,
-      queryFn: () => fetchSchema(id),
-      enabled: !!id,
-      staleTime: 1000 * 60 * 60,
-    })),
-  });
-
-  const schemaMap = useMemo(() => {
-    const m = new Map<string, string>();
-    schemaQueries.forEach((q, idx) => {
-      const schema = (q.data as any)?.schema?.schema ?? (q.data as any)?.schema;
-      // depending on response shape; we’ll standardize once we see it
-      if (schema) m.set(schemaIds[idx], schema);
-    });
-    return m;
-  }, [schemaQueries, schemaIds]);
-
+  if (!isConnected) {
+    return (
+      <div className="min-vh-100 d-flex flex-column align-items-center justify-content-center p-4 text-center">
+        <h1 className="fw-bold mb-2">HackaTon</h1>
+        <p className="text-muted" style={{ maxWidth: 420 }}>
+          Hackathon team formation with verified on-chain credentials and AI-assisted matching.
+        </p>
+        <button
+          className="btn btn-primary btn-lg mt-3"
+          onClick={() => connect({ connector: connectors[0] })}
+          disabled={isPending}
+        >
+          {isPending ? "Connecting" : "Connect Wallet"}
+        </button>
+        {error && <p className="text-danger mt-2 small">{error.message}</p>}
+      </div>
+    );
+  }
 
   return (
-    <div style={{ padding: 24, fontFamily: "system-ui, sans-serif" }}>
-      <h1>HackaTon</h1>
+    <nav className="navbar navbar-light bg-white border-bottom px-3">
+      <span className="navbar-brand fw-bold mb-0">HackaTon</span>
+      <div className="d-flex align-items-center gap-2">
+        <span className="text-muted small d-none d-sm-inline">{chain?.name}</span>
+        <code className="badge bg-secondary" title={address}>
+          {walletName}
+        </code>
+        <button className="btn btn-outline-secondary btn-sm" onClick={() => disconnect()}>
+          Disconnect
+        </button>
+      </div>
+    </nav>
+  );
+}
 
-      {!isConnected ? (
-        <>
-          <button
-            onClick={() => connect({ connector: connectors[0] })}
-            disabled={isPending}
+function ModeSelector({ mode, onSelect }: { mode: Mode | null; onSelect: (m: Mode) => void }) {
+  const items: { key: Mode; title: string; desc: string }[] = [
+    {
+      key: "applicant",
+      title: "Builder / Applicant",
+      desc: "Share your skills, link on-chain credentials, and receive intro requests from teams.",
+    },
+    {
+      key: "team-owner",
+      title: "Team Owner",
+      desc: "Post a project listing, set a finder fee, and find matched builders.",
+    },
+  ];
+
+  return (
+    <div className="row g-3 mb-4">
+      {items.map(({ key, title, desc }) => (
+        <div className="col-12 col-sm-6" key={key}>
+          <div
+            className={`card h-100 ${mode === key ? "border-primary" : ""}`}
+            style={{ cursor: "pointer" }}
+            onClick={() => onSelect(key)}
           >
-            {isPending ? "Connecting..." : "Connect Wallet"}
-          </button>
-          {error && <p style={{ color: "crimson" }}>{error.message}</p>}
-        </>
-      ) : (
-        <>
-          <p>
-            Connected: <code>{address}</code>
-          </p>
-          <p>
-            Chain: <code>{chain?.name ?? "Unknown"}</code>
-          </p>
-          <button onClick={() => disconnect()}>Disconnect</button>
+            <div className="card-body">
+              <h5 className={`card-title ${mode === key ? "text-primary" : ""}`}>{title}</h5>
+              <p className="card-text text-muted">{desc}</p>
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
 
-          <hr style={{ margin: "24px 0" }} />
+export default function App() {
+  const { address, isConnected } = useAccount();
+  const [mode, setMode] = useState<Mode | null>(null);
+  const [profile, setProfile] = useState<BuilderProfile | null>(
+    () => (address ? loadProfile(address) : null)
+  );
+  const [teams, setTeams] = useState<TeamListing[]>(() => loadTeams());
 
-          <h2>On-chain Credentials (EAS)</h2>
+  const handleProfileSaved = useCallback((p: BuilderProfile) => setProfile(p), []);
+  const handleTeamSaved = useCallback(() => setTeams(loadTeams()), []);
 
-          {isLoading && <p>Loading attestations…</p>}
-          {isError && <p style={{ color: "crimson" }}>Error loading attestations.</p>}
-
-          {!isLoading && !isError && (
-            <>
-              <p>Found: {atts.length}</p>
-              <div style={{ display: "grid", gap: 12 }}>
-                {atts.map((a: any) => {
-                  const schema = schemaMap.get(a.schemaId);
-
-                  let decoded: Record<string, any> | null = null;
-                  let decodeError: string | null = null;
-
-                  if (schema) {
-                    try {
-                      decoded = decodeAttestationData(schema, a.data);
-                    } catch (e: any) {
-                      decodeError = e?.message ?? String(e);
-                    }
-                  }
-
-                  return (
-                    <div
-                      key={a.id}
-                      style={{
-                        border: "1px solid #ddd",
-                        borderRadius: 12,
-                        padding: 12,
-                      }}
-                    >
-                      <div>
-                        <strong>Schema:</strong> <code>{a.schemaId}</code>
-                      </div>
-                      <div>
-                        <strong>Attester:</strong> <code>{a.attester}</code>
-                      </div>
-                      <div>
-                        <strong>Time:</strong> <code>{a.time}</code>
-                      </div>
-                      <div>
-                        <strong>Revoked:</strong> <code>{String(a.revoked)}</code>
-                      </div>
-
-                      <div style={{ marginTop: 10 }}>
-                        <strong>Decoded:</strong>
-                      </div>
-
-                      {!schema && (
-                        <div style={{ opacity: 0.7 }}>
-                          (Loading schema…)
-                        </div>
-                      )}
-
-                      {schema && decoded && (
-                        <pre style={{ whiteSpace: "pre-wrap", marginTop: 8 }}>
-                          {JSON.stringify(decoded, null, 2)}
-                        </pre>
-                      )}
-
-                      {schema && !decoded && (
-                        <div style={{ color: "crimson", marginTop: 8 }}>
-                          Decode failed: {decodeError ?? "unknown error"}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-
-              </div>
-            </>
+  return (
+    <div className="min-vh-100 bg-light">
+      <WalletBar />
+      {isConnected && (
+        <div className="container py-4" style={{ maxWidth: 800 }}>
+          <ModeSelector mode={mode} onSelect={setMode} />
+          {!mode && (
+            <p className="text-center text-muted">Select a mode above to get started.</p>
           )}
-        </>
+          {mode === "applicant" && (
+            <ApplicantView profile={profile} teams={teams} onProfileSaved={handleProfileSaved} />
+          )}
+          {mode === "team-owner" && (
+            <TeamOwnerView teams={teams} onTeamSaved={handleTeamSaved} />
+          )}
+        </div>
       )}
     </div>
   );

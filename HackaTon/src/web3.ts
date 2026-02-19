@@ -1,11 +1,13 @@
 import { http, createConfig } from "wagmi";
-import { arbitrum } from "wagmi/chains";
+import { arbitrum, mainnet } from "wagmi/chains";
 import { injected } from "wagmi/connectors";
 
 export const wagmiConfig = createConfig({
-  chains: [arbitrum],
+  // arbitrum = primary interactive chain; mainnet = read-only, needed for ENS resolution
+  chains: [arbitrum, mainnet],
   connectors: [injected()],
   transports: {
     [arbitrum.id]: http(),
+    [mainnet.id]: http(), // ENS lookups run on mainnet
   },
 });
