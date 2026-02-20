@@ -87,7 +87,7 @@ function ModeSelector({ mode, onSelect }: { mode: Mode | null; onSelect: (m: Mod
     {
       key: "team-owner",
       title: "Team Owner",
-      desc: "Post a project listing, set a finder fee, and find matched builders.",
+      desc: "Post a project listing, and find matched builders.",
     },
   ];
 
