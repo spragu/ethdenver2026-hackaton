@@ -1,6 +1,6 @@
 ﻿import { useState } from "react";
-import type { BuilderProfile, Role, Availability } from "../types";
-import { ALL_ROLES, COMMON_SKILLS } from "../types";
+import type { BuilderProfile } from "../types";
+import { COMMON_SKILLS } from "../types";
 import { parseOpenseaUrl } from "../nft";
 
 interface Props {
@@ -9,22 +9,11 @@ interface Props {
   onSave: (profile: BuilderProfile) => void;
 }
 
-const AVAILABILITY_LABELS: Record<Availability, string> = {
-  "full-time": "Full-time (40h/week)",
-  "part-time": "Part-time (1020h/week)",
-  "weekends-only": "Weekends only",
-};
-
 export function BuilderProfileForm({ wallet, initial, onSave }: Props) {
   const [name, setName] = useState(initial?.name ?? "");
   const [handle, setHandle] = useState(initial?.handle ?? "");
   const [bio, setBio] = useState(initial?.bio ?? "");
-  const [availability, setAvailability] = useState<Availability>(
-    initial?.availability ?? "part-time"
-  );
-  const [selectedRoles, setSelectedRoles] = useState<Role[]>(initial?.roles ?? []);
   const [selectedSkills, setSelectedSkills] = useState<string[]>(initial?.skills ?? []);
-  const [customSkill, setCustomSkill] = useState("");
   const [github, setGithub] = useState(initial?.links?.github ?? "");
   const [twitter, setTwitter] = useState(initial?.links?.twitter ?? "");
   const [website, setWebsite] = useState(initial?.links?.website ?? "");
@@ -32,24 +21,10 @@ export function BuilderProfileForm({ wallet, initial, onSave }: Props) {
   const [nftInput, setNftInput] = useState("");
   const [nftInputError, setNftInputError] = useState<string | null>(null);
 
-  function toggleRole(role: Role) {
-    setSelectedRoles((prev) =>
-      prev.includes(role) ? prev.filter((r) => r !== role) : [...prev, role]
-    );
-  }
-
   function toggleSkill(skill: string) {
     setSelectedSkills((prev) =>
       prev.includes(skill) ? prev.filter((s) => s !== skill) : [...prev, skill]
     );
-  }
-
-  function addCustomSkill() {
-    const trimmed = customSkill.trim();
-    if (trimmed && !selectedSkills.includes(trimmed)) {
-      setSelectedSkills((prev) => [...prev, trimmed]);
-    }
-    setCustomSkill("");
   }
 
   function addNft() {
@@ -84,8 +59,6 @@ export function BuilderProfileForm({ wallet, initial, onSave }: Props) {
       name: name.trim(),
       handle: handle.trim(),
       bio: bio.trim(),
-      availability,
-      roles: selectedRoles,
       skills: selectedSkills,
       links: {
         github: github.trim() || undefined,
@@ -139,38 +112,6 @@ export function BuilderProfileForm({ wallet, initial, onSave }: Props) {
       </div>
 
       <div className="mb-3">
-        <label className="form-label fw-semibold">Availability</label>
-        <div>
-          {(Object.keys(AVAILABILITY_LABELS) as Availability[]).map((a) => (
-            <button
-              key={a}
-              type="button"
-              className={chipBtn(availability === a)}
-              onClick={() => setAvailability(a)}
-            >
-              {AVAILABILITY_LABELS[a]}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div className="mb-3">
-        <label className="form-label fw-semibold">Roles you can fill</label>
-        <div>
-          {ALL_ROLES.map((role) => (
-            <button
-              key={role}
-              type="button"
-              className={chipBtn(selectedRoles.includes(role))}
-              onClick={() => toggleRole(role)}
-            >
-              {role}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div className="mb-3">
         <label className="form-label fw-semibold">Skills</label>
         <div className="mb-2">
           {COMMON_SKILLS.map((skill) => (
@@ -183,32 +124,6 @@ export function BuilderProfileForm({ wallet, initial, onSave }: Props) {
               {skill}
             </button>
           ))}
-          {selectedSkills
-            .filter((s) => !COMMON_SKILLS.includes(s))
-            .map((skill) => (
-              <button
-                key={skill}
-                type="button"
-                className="btn btn-sm rounded-pill me-1 mb-1 btn-primary"
-                onClick={() => toggleSkill(skill)}
-              >
-                {skill} 
-              </button>
-            ))}
-        </div>
-        <div className="input-group">
-          <input
-            className="form-control"
-            value={customSkill}
-            onChange={(e) => setCustomSkill(e.target.value)}
-            onKeyDown={(e) =>
-              e.key === "Enter" && (e.preventDefault(), addCustomSkill())
-            }
-            placeholder="Add custom skill"
-          />
-          <button type="button" className="btn btn-outline-secondary" onClick={addCustomSkill}>
-            Add
-          </button>
         </div>
       </div>
 

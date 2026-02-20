@@ -1,6 +1,6 @@
 ﻿import { useState } from "react";
-import type { TeamListing, Role } from "../types";
-import { ALL_ROLES, COMMON_SKILLS } from "../types";
+import type { TeamListing } from "../types";
+import { COMMON_SKILLS } from "../types";
 import { generateId } from "../storage";
 
 interface Props {
@@ -12,16 +12,9 @@ interface Props {
 export function TeamListingForm({ ownerWallet, initial, onSave }: Props) {
   const [projectName, setProjectName] = useState(initial?.projectName ?? "");
   const [description, setDescription] = useState(initial?.description ?? "");
-  const [requiredRoles, setRequiredRoles] = useState<Role[]>(initial?.requiredRoles ?? []);
   const [desiredSkills, setDesiredSkills] = useState<string[]>(initial?.desiredSkills ?? []);
   const [customSkill, setCustomSkill] = useState("");
   const [maxTeamSize, setMaxTeamSize] = useState(initial?.maxTeamSize ?? 4);
-
-  function toggleRole(role: Role) {
-    setRequiredRoles((prev) =>
-      prev.includes(role) ? prev.filter((r) => r !== role) : [...prev, role]
-    );
-  }
 
   function toggleSkill(skill: string) {
     setDesiredSkills((prev) =>
@@ -45,7 +38,6 @@ export function TeamListingForm({ ownerWallet, initial, onSave }: Props) {
       ownerWallet,
       projectName: projectName.trim(),
       description: description.trim(),
-      requiredRoles,
       desiredSkills,
       maxTeamSize,
       createdAt: initial?.createdAt ?? Date.now(),
@@ -80,22 +72,6 @@ export function TeamListingForm({ ownerWallet, initial, onSave }: Props) {
           onChange={(e) => setDescription(e.target.value)}
           placeholder="What are you building? What problem does it solve?"
         />
-      </div>
-
-      <div className="mb-3">
-        <label className="form-label fw-semibold">Roles Needed</label>
-        <div>
-          {ALL_ROLES.map((role) => (
-            <button
-              key={role}
-              type="button"
-              className={chipBtn(requiredRoles.includes(role))}
-              onClick={() => toggleRole(role)}
-            >
-              {role}
-            </button>
-          ))}
-        </div>
       </div>
 
       <div className="mb-3">

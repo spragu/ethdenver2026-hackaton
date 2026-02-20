@@ -147,11 +147,8 @@ export function AIRankingPanel({ team }: Props) {
                     <ScoreBadge score={r.score} />
                   </div>
 
-                  {/* Skills & roles */}
+                  {/* Skills */}
                   <div className="d-flex flex-wrap gap-1 mb-2">
-                    {r.profile.roles.map((role) => (
-                      <span key={role} className="badge bg-secondary">{role}</span>
-                    ))}
                     {r.profile.skills.slice(0, 6).map((skill) => (
                       <span key={skill} className="badge border text-secondary">{skill}</span>
                     ))}

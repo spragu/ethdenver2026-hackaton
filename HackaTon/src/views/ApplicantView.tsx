@@ -70,7 +70,7 @@ export function ApplicantView({ profile, teams, onProfileSaved }: Props) {
         <h4 className="mb-0">Builder Dashboard</h4>
         {profile && (
           <span className="text-muted small">
-            {profile.name} &middot; {profile.roles.join(", ")}
+            {profile.name}
           </span>
         )}
       </div>

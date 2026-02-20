@@ -9,12 +9,6 @@ interface Props {
   onApplied: () => void;
 }
 
-const availabilityVariant: Record<string, string> = {
-  "full-time": "success",
-  "part-time": "warning",
-  "weekends-only": "danger",
-};
-
 export function TeamBrowser({ teams, applicantProfile, applicantWallet, onApplied }: Props) {
   const [messageMap, setMessageMap] = useState<Record<string, string>>({});
   const [sentSet, setSentSet] = useState<Set<string>>(
@@ -30,19 +24,9 @@ export function TeamBrowser({ teams, applicantProfile, applicantWallet, onApplie
       )
   );
 
-  // Score how well this team fits the applicant
-  function scoreMatch(team: TeamListing): number {
-    const roles = applicantProfile?.roles ?? [];
-    const skills = applicantProfile?.skills ?? [];
-    const roleMatch = roles.filter((r) => team.requiredRoles.includes(r)).length;
-    const skillMatch = skills.filter((s) => team.desiredSkills.includes(s)).length;
-    return roleMatch * 3 + skillMatch;
-  }
-
   // Don't show teams owned by the applicant themselves
   const browseable = teams
-    .filter((t) => t.ownerWallet.toLowerCase() !== applicantWallet.toLowerCase())
-    .sort((a, b) => scoreMatch(b) - scoreMatch(a));
+    .filter((t) => t.ownerWallet.toLowerCase() !== applicantWallet.toLowerCase());
 
   function applyToTeam(team: TeamListing) {
     const intro: IntroRequest = {
@@ -72,16 +56,11 @@ export function TeamBrowser({ teams, applicantProfile, applicantWallet, onApplie
   return (
     <div>
       <p className="text-muted small mb-3">
-        Teams ranked by match to your roles and skills. Click "Apply" to send your profile
-        directly to the team owner.
+        Browse open teams and apply. Matching skills are highlighted.
       </p>
       <div className="d-flex flex-column gap-3">
         {browseable.map((team) => {
-          const score = scoreMatch(team);
           const applied = sentSet.has(team.id);
-          const roleMatches = team.requiredRoles.filter((r) =>
-            (applicantProfile?.roles ?? []).includes(r)
-          );
           const skillMatches = team.desiredSkills.filter((s) =>
             (applicantProfile?.skills ?? []).includes(s)
           );
@@ -91,27 +70,13 @@ export function TeamBrowser({ teams, applicantProfile, applicantWallet, onApplie
               <div className="card-body">
                 <div className="d-flex justify-content-between align-items-start mb-1">
                   <h6 className="mb-0">{team.projectName}</h6>
-                  <div className="d-flex gap-2 flex-shrink-0">
-                    {score > 0 && (
-                      <span className="badge bg-primary">&#9733; {score} match</span>
-                    )}
-                  </div>
                 </div>
 
                 {team.description && (
                   <p className="small text-muted mb-2">{team.description}</p>
                 )}
 
-                {/* Roles needed */}
                 <div className="d-flex flex-wrap gap-1 mb-2">
-                  {team.requiredRoles.map((r) => (
-                    <span
-                      key={r}
-                      className={`badge ${roleMatches.includes(r) ? "bg-primary" : "bg-light text-dark border"}`}
-                    >
-                      {r}
-                    </span>
-                  ))}
                   {team.desiredSkills.map((s) => (
                     <span
                       key={s}
@@ -122,15 +87,9 @@ export function TeamBrowser({ teams, applicantProfile, applicantWallet, onApplie
                   ))}
                 </div>
 
-                {/* Applicant's matching availability */}
                 {applicantProfile && (
                 <div className="mb-2">
-                  <span
-                    className={`badge bg-${availabilityVariant[applicantProfile.availability] ?? "secondary"}`}
-                  >
-                    You: {applicantProfile.availability}
-                  </span>
-                  <span className="text-muted small ms-2">
+                  <span className="text-muted small">
                     Team size up to {team.maxTeamSize}
                   </span>
                 </div>

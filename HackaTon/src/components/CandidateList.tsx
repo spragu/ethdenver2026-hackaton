@@ -8,7 +8,6 @@ import { rankCandidates } from "../0gai";
 
 interface AIRank { stars: number; reasoning: string; }
 
-/** 0–5 filled stars with a hover tooltip showing AI reasoning. */
 function StarRating({ stars, reasoning }: AIRank) {
   const [show, setShow] = useState(false);
   return (
@@ -47,12 +46,6 @@ function StarRating({ stars, reasoning }: AIRank) {
   );
 }
 
-const availabilityVariant: Record<string, string> = {
-  "full-time": "success",
-  "part-time": "warning",
-  "weekends-only": "danger",
-};
-
 interface Props {
   team: TeamListing;
   ownerWallet: string;
@@ -89,7 +82,6 @@ export function CandidateList({ team, ownerWallet, onIntroSent }: Props) {
   );
   const [messageMap, setMessageMap] = useState<Record<string, string>>({});
   const [aiRankings, setAiRankings] = useState<Record<string, AIRank>>(() => {
-    // Hydrate from cache
     const cached = loadAllAIRanks(team.id);
     const hydrated: Record<string, AIRank> = {};
     for (const [wallet, rank] of Object.entries(cached)) {
@@ -97,7 +89,6 @@ export function CandidateList({ team, ownerWallet, onIntroSent }: Props) {
     }
     return hydrated;
   });
-  // wallets currently being evaluated by AI
   const [aiLoadingWallets, setAiLoadingWallets] = useState<Set<string>>(new Set());
   const [aiError, setAiError] = useState("");
 
@@ -111,11 +102,7 @@ export function CandidateList({ team, ownerWallet, onIntroSent }: Props) {
 
   function applyResult(wallet: string, score: number, reasoning: string) {
     const stars = Math.min(5, Math.max(0, Math.round(score / 20)));
-    setAiRankings((prev) => ({
-      ...prev,
-      [wallet.toLowerCase()]: { stars, reasoning },
-    }));
-    // Persist to cache
+    setAiRankings((prev) => ({ ...prev, [wallet.toLowerCase()]: { stars, reasoning } }));
     saveAIRank(team.id, wallet, { stars, reasoning, score, cachedAt: Date.now() });
   }
 
@@ -124,11 +111,8 @@ export function CandidateList({ team, ownerWallet, onIntroSent }: Props) {
     setAiError("");
     try {
       const results = await rankCandidates(team, [candidate]);
-      if (results[0]) {
-        applyResult(candidate.wallet, results[0].score, results[0].reasoning);
-      } else {
-        throw new Error("AI returned no result for this candidate. Check console for the raw response.");
-      }
+      if (results[0]) applyResult(candidate.wallet, results[0].score, results[0].reasoning);
+      else throw new Error("AI returned no result for this candidate.");
     } catch (e) {
       setAiError(String(e));
     } finally {
@@ -139,9 +123,7 @@ export function CandidateList({ team, ownerWallet, onIntroSent }: Props) {
   async function runAiRanking() {
     if (allCandidates.length === 0) return;
     setAiError("");
-    // Mark all as loading immediately so spinners appear right away
     setAiLoadingWallets(new Set(allCandidates.map((c) => c.wallet.toLowerCase())));
-    // Fire one request per candidate in parallel so each card fills in as it resolves
     await Promise.all(
       allCandidates.map(async (candidate) => {
         try {
@@ -160,9 +142,8 @@ export function CandidateList({ team, ownerWallet, onIntroSent }: Props) {
   const hasAiRankings = Object.keys(aiRankings).length > 0;
 
   function scoreMatch(candidate: BuilderProfile): number {
-    const roleMatch = candidate.roles.filter((r) => team.requiredRoles.includes(r)).length;
     const skillMatch = candidate.skills.filter((s) => team.desiredSkills.includes(s)).length;
-    return roleMatch * 3 + skillMatch;
+    return skillMatch;
   }
 
   const ranked = [...allCandidates].sort((a, b) => {
@@ -201,10 +182,16 @@ export function CandidateList({ team, ownerWallet, onIntroSent }: Props) {
     }
   }
 
-  // Profiles of applicants who applied directly, for display
-  const applicantProfileMap = new Map(
-    allCandidates.map((p) => [p.wallet.toLowerCase(), p])
+  // Map from wallet -> intro object for applicants, so we can accept/decline inline
+  const incomingIntroMap = new Map(
+    incomingApplications.map((i) => [i.applicantWallet.toLowerCase(), i])
   );
+
+  // Unified list: all candidates except those explicitly declined
+  const visible = ranked.filter((c) => {
+    const status = applicationStatuses[c.wallet.toLowerCase()];
+    return status !== "declined";
+  });
 
   return (
     <div>
@@ -222,90 +209,46 @@ export function CandidateList({ team, ownerWallet, onIntroSent }: Props) {
         </button>
       </div>
       <p className="text-muted small mb-3">
-        {hasAiRankings ? "Sorted by AI match score — hover a star rating for reasoning." : "Ranked by role and skill overlap. Click \"AI Rank\" for AI-powered scoring."}
+        {hasAiRankings ? "Sorted by AI star rating — highest ranked first." : "Ranked by skill overlap. Click \"AI Rank\" for AI-powered scoring."}
       </p>
       {aiError && (
         <div className="alert alert-danger py-2 small mb-3">{aiError}</div>
       )}
 
-      {/* Incoming applications from builders */}
-      {incomingApplications.length > 0 && (
-        <div className="mb-4">
-          <h6 className="text-muted mb-2">&#128229; Incoming Applications ({incomingApplications.length})</h6>
-          <div className="d-flex flex-column gap-3">
-            {incomingApplications.map((intro) => {
-              const profile = applicantProfileMap.get(intro.applicantWallet.toLowerCase());
-              const currentStatus = applicationStatuses[intro.applicantWallet.toLowerCase()] ?? intro.status;
-              return (
-                <div key={intro.id} className="card border-primary">
-                  <div className="card-body">
-                    <div className="d-flex justify-content-between align-items-start mb-1">
-                      <div>
-                        <h6 className="mb-0">{profile?.name ?? <WalletName address={intro.applicantWallet} />}</h6>
-                        {profile?.handle && <small className="text-muted">{profile.handle}</small>}
-                        {intro.teamName !== team.projectName && (
-                          <div><small className="text-muted">Applied to: <strong>{intro.teamName}</strong></small></div>
-                        )}
-                      </div>
-                      <span className={`badge bg-${{ requested: "warning", accepted: "success", declined: "danger", expired: "secondary" }[currentStatus]}`}>
-                        {currentStatus}
-                      </span>
-                    </div>
-                    {profile?.bio && <p className="small text-muted mb-2">{profile.bio}</p>}
-                    {intro.message && (
-                      <div className="alert alert-light py-2 small mb-2">&#128172; "{intro.message}"</div>
-                    )}
-                    {profile && (
-                      <div className="d-flex flex-wrap gap-1 mb-2">
-                        {profile.roles.map((r) => (
-                          <span key={r} className={`badge ${team.requiredRoles.includes(r) ? "bg-primary" : "bg-secondary"}`}>{r}</span>
-                        ))}
-                        {profile.skills.slice(0, 5).map((s) => (
-                          <span key={s} className={`badge ${team.desiredSkills.includes(s) ? "bg-success" : "bg-light text-dark border"}`}>{s}</span>
-                        ))}
-                      </div>
-                    )}
-                    {currentStatus === "requested" && (
-                      <div className="d-flex gap-2">
-                        <button className="btn btn-success btn-sm" onClick={() => respondToApplication(intro, "accepted")}>Accept</button>
-                        <button className="btn btn-outline-danger btn-sm" onClick={() => respondToApplication(intro, "declined")}>Decline</button>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-          <hr className="my-4" />
-        </div>
-      )}
-
-      {/* All candidates */}
       <div className="d-flex flex-column gap-3">
-        {ranked.length === 0 ? (
+        {visible.length === 0 ? (
           <div className="text-center py-5 text-muted">
             <p className="mb-1">No builders have signed up yet.</p>
             <p className="small">Share your listing so builders can create profiles and apply.</p>
           </div>
-        ) : ranked.map((candidate) => {
+        ) : visible.map((candidate) => {
+          const walletKey = candidate.wallet.toLowerCase();
           const alreadySent = sentIntros.has(candidate.wallet);
-          const hasApplied = incomingWallets.has(candidate.wallet.toLowerCase());
-          const roleMatches = candidate.roles.filter((r) => team.requiredRoles.includes(r));
+          const hasApplied = incomingWallets.has(walletKey);
+          const intro = incomingIntroMap.get(walletKey);
+          const currentStatus = applicationStatuses[walletKey] ?? intro?.status;
           const skillMatches = candidate.skills.filter((s) => team.desiredSkills.includes(s));
 
           return (
-            <div key={candidate.wallet} className="card">
+            <div
+              key={candidate.wallet}
+              className={`card ${hasApplied && currentStatus === "requested" ? "border-primary" : ""}`}
+            >
               <div className="card-body">
                 <div className="d-flex justify-content-between align-items-start mb-2">
                   <div>
-                    <h6 className="mb-0">{candidate.name}</h6>
-                    <small className="text-muted">{candidate.handle}</small>
+                    <h6 className="mb-0">{candidate.name || <WalletName address={candidate.wallet} />}</h6>
+                    {candidate.handle && <small className="text-muted">{candidate.handle}</small>}
                   </div>
                   <div className="d-flex gap-2 align-items-center flex-shrink-0">
+                    {hasApplied && currentStatus && (
+                      <span className={`badge bg-${{ requested: "warning", accepted: "success", declined: "danger", expired: "secondary" }[currentStatus]}`}>
+                        {currentStatus === "requested" ? "Applied" : currentStatus}
+                      </span>
+                    )}
                     {(() => {
-                      const wallet = candidate.wallet.toLowerCase();
-                      const ai = aiRankings[wallet];
-                      const loading = aiLoadingWallets.has(wallet);
+                      const ai = aiRankings[walletKey];
+                      const loading = aiLoadingWallets.has(walletKey);
                       if (loading) {
                         return (
                           <span className="d-inline-flex align-items-center gap-1 text-muted" style={{ fontSize: "0.85rem" }}>
@@ -314,28 +257,25 @@ export function CandidateList({ team, ownerWallet, onIntroSent }: Props) {
                           </span>
                         );
                       }
-                      if (ai) {
-                        return <StarRating stars={ai.stars} reasoning={ai.reasoning} />;
-                      }
+                      if (ai) return <StarRating stars={ai.stars} reasoning={ai.reasoning} />;
                       return (
-                        <span className="d-inline-flex align-items-center gap-1">
-                          <button
-                            className="btn btn-outline-warning btn-sm py-0 px-1"
-                            style={{ fontSize: "0.75rem", lineHeight: "1.4" }}
-                            title="Evaluate with AI"
-                            disabled={anyLoading}
-                            onClick={() => rankOne(candidate)}
-                          >
-                            &#9733; Evaluate
-                          </button>
-                        </span>
+                        <button
+                          className="btn btn-outline-warning btn-sm py-0 px-1"
+                          style={{ fontSize: "0.75rem", lineHeight: "1.4" }}
+                          title="Evaluate with AI"
+                          disabled={anyLoading}
+                          onClick={() => rankOne(candidate)}
+                        >
+                          &#9733; Evaluate
+                        </button>
                       );
                     })()}
-                    <span className={`badge bg-${availabilityVariant[candidate.availability] ?? "secondary"}`}>
-                      {candidate.availability}
-                    </span>
                   </div>
                 </div>
+
+                {intro?.message && (
+                  <div className="alert alert-light py-2 small mb-2">&#128172; "{intro.message}"</div>
+                )}
 
                 {candidate.bio && (
                   <p className="small text-muted mb-2">{candidate.bio}</p>
@@ -350,17 +290,9 @@ export function CandidateList({ team, ownerWallet, onIntroSent }: Props) {
                 )}
 
                 <div className="d-flex flex-wrap gap-1 mb-2">
-                  {roleMatches.map((r) => (
-                    <span key={r} className="badge bg-primary">{r}</span>
-                  ))}
                   {skillMatches.map((s) => (
-                    <span key={s} className="badge bg-success">{s}</span>
+                    <span key={s} className="badge bg-primary">{s}</span>
                   ))}
-                  {candidate.roles
-                    .filter((r) => !roleMatches.includes(r))
-                    .map((r) => (
-                      <span key={r} className="badge bg-secondary">{r}</span>
-                    ))}
                   {candidate.skills
                     .filter((s) => !skillMatches.includes(s))
                     .slice(0, 4)
@@ -369,9 +301,16 @@ export function CandidateList({ team, ownerWallet, onIntroSent }: Props) {
                     ))}
                 </div>
 
-                {hasApplied ? (
-                  <div className="text-primary small">&#128229; This builder applied — see Incoming Applications above</div>
-                ) : !alreadySent ? (
+                {hasApplied && currentStatus === "requested" && intro ? (
+                  <div className="d-flex gap-2">
+                    <button className="btn btn-success btn-sm" onClick={() => respondToApplication(intro, "accepted")}>Accept</button>
+                    <button className="btn btn-outline-danger btn-sm" onClick={() => respondToApplication(intro, "declined")}>Decline</button>
+                  </div>
+                ) : hasApplied && currentStatus === "accepted" ? (
+                  <div className="text-success small">&#10003; Accepted</div>
+                ) : alreadySent ? (
+                  <div className="text-success small">&#10003; Intro request sent</div>
+                ) : (
                   <div>
                     <textarea
                       className="form-control form-control-sm mb-2"
@@ -379,21 +318,13 @@ export function CandidateList({ team, ownerWallet, onIntroSent }: Props) {
                       placeholder="Optional intro message"
                       value={messageMap[candidate.wallet] ?? ""}
                       onChange={(e) =>
-                        setMessageMap((prev) => ({
-                          ...prev,
-                          [candidate.wallet]: e.target.value,
-                        }))
+                        setMessageMap((prev) => ({ ...prev, [candidate.wallet]: e.target.value }))
                       }
                     />
-                    <button
-                      className="btn btn-primary btn-sm"
-                      onClick={() => sendIntro(candidate)}
-                    >
+                    <button className="btn btn-primary btn-sm" onClick={() => sendIntro(candidate)}>
                       Send Intro Request
                     </button>
                   </div>
-                ) : (
-                  <div className="text-success small">&#10003; Intro request sent</div>
                 )}
               </div>
             </div>

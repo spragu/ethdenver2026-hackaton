@@ -1,4 +1,4 @@
-﻿import { useState, useCallback } from "react";
+﻿import { useState, useCallback, useEffect, useRef } from "react";
 import { useAccount, useConnect, useDisconnect } from "wagmi";
 import type { BuilderProfile, TeamListing } from "./types";
 import { loadProfile, loadTeams, clearAllData } from "./storage";
@@ -17,7 +17,7 @@ function WalletBar({ adminMode, onToggleAdmin }: { adminMode: boolean; onToggleA
   if (!isConnected) {
     return (
       <div className="min-vh-100 d-flex flex-column align-items-center justify-content-center p-4 text-center">
-        <h1 className="fw-bold mb-2">HackaTon</h1>
+        <h1 className="fw-bold mb-2">HackaTon — hackathon team builder</h1>
         <p className="text-muted" style={{ maxWidth: 420 }}>
           Hackathon team formation with verified on-chain credentials and AI-assisted matching.
         </p>
@@ -35,7 +35,7 @@ function WalletBar({ adminMode, onToggleAdmin }: { adminMode: boolean; onToggleA
 
   return (
     <nav className="navbar navbar-light bg-white border-bottom px-3">
-      <span className="navbar-brand fw-bold mb-0">HackaTon</span>
+      <span className="navbar-brand fw-bold mb-0">HackaTon — hackathon team builder</span>
       <div className="d-flex align-items-center gap-2">
         <span className="text-muted small d-none d-sm-inline">{chain?.name}</span>
         <div className="form-check form-switch mb-0 d-flex align-items-center gap-1" title="Enable admin tools (AI ranking, 0G account)">
@@ -119,6 +119,17 @@ export default function App() {
     () => (address ? loadProfile(address) : null)
   );
   const [teams, setTeams] = useState<TeamListing[]>(() => loadTeams());
+
+  // Reset all per-wallet state whenever the connected account changes
+  const prevAddress = useRef(address);
+  useEffect(() => {
+    if (address !== prevAddress.current) {
+      prevAddress.current = address;
+      setProfile(address ? loadProfile(address) : null);
+      setTeams(loadTeams());
+      setMode(null);
+    }
+  }, [address]);
 
   const handleProfileSaved = useCallback((p: BuilderProfile) => setProfile(p), []);
   const handleTeamSaved = useCallback(() => setTeams(loadTeams()), []);

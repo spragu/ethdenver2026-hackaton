@@ -252,7 +252,6 @@ export async function rankCandidates(
   const teamContext = [
     `Project: ${team.projectName}`,
     `Description: ${team.description}`,
-    `Required roles: ${team.requiredRoles.join(", ")}`,
     `Desired skills: ${team.desiredSkills.join(", ")}`,
     `Max team size: ${team.maxTeamSize}`,
   ].join("\n");
@@ -263,9 +262,7 @@ export async function rankCandidates(
         `Candidate ${i + 1}\n` +
         `  Name: ${p.name}\n` +
         `  Bio: ${p.bio}\n` +
-        `  Roles: ${p.roles.join(", ")}\n` +
-        `  Skills: ${p.skills.join(", ")}\n` +
-        `  Availability: ${p.availability}`
+        `  Skills: ${p.skills.join(", ")}`
     )
     .join("\n\n");
 

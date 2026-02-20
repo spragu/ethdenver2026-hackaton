@@ -11,26 +11,12 @@ declare global {
   }
 }
 
-export type Role =
-  | "Frontend"
-  | "Backend"
-  | "Smart Contract"
-  | "UI/UX"
-  | "AI/ML"
-  | "DevOps"
-  | "Product"
-  | "Other";
-
-export type Availability = "full-time" | "part-time" | "weekends-only";
-
 export interface BuilderProfile {
   wallet: string;
   name: string;
   handle: string;
   bio: string;
   skills: string[];
-  roles: Role[];
-  availability: Availability;
   links: {
     github?: string;
     twitter?: string;
@@ -49,7 +35,6 @@ export interface TeamListing {
   ownerWallet: string;
   projectName: string;
   description: string;
-  requiredRoles: Role[];
   desiredSkills: string[];
   maxTeamSize: number;
   createdAt: number;
@@ -84,31 +69,38 @@ export interface ChatMessage {
   timestamp: number;
 }
 
-export const ALL_ROLES: Role[] = [
-  "Frontend",
-  "Backend",
-  "Smart Contract",
-  "UI/UX",
-  "AI/ML",
-  "DevOps",
-  "Product",
-  "Other",
-];
-
 export const COMMON_SKILLS = [
+  // Languages
   "TypeScript",
-  "React",
-  "Solidity",
-  "Rust",
+  "JavaScript",
   "Python",
+  "Rust",
+  "Go",
+  "Java",
+  "C++",
+  "C#",
+  "Solidity",
+  "Vyper",
+  "Move",
+  // Frontend frameworks
+  "React",
+  "Next.js",
+  "Vue.js",
+  "Svelte",
+  "Angular",
+  "Tailwind CSS",
+  // Backend / infra
   "Node.js",
   "GraphQL",
-  "IPFS",
+  "Docker",
+  "AWS",
+  // Web3
   "EVM",
-  "ZK Proofs",
-  "LLMs",
   "Wagmi / Viem",
   "Hardhat / Foundry",
-  "AWS",
-  "Docker",
+  "IPFS",
+  "ZK",
+  // AI / other
+  "LLMs",
+  "Privacy",
 ];
