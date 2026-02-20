@@ -6,24 +6,34 @@ import { TeamListingForm } from "../components/TeamListingForm";
 import { CandidateList } from "../components/CandidateList";
 import { EncryptedChat } from "../components/EncryptedChat";
 import { WalletName } from "../components/WalletName";
+import { AIRankingPanel } from "../components/AIRankingPanel";
+import { ZGAccountPanel } from "../components/ZGAccountPanel";
 
-type Tab = "listing" | "candidates" | "messages";
+type Tab = "listing" | "candidates" | "ai-rank" | "zg-account" | "messages";
 
 interface Props {
   teams: TeamListing[];
   onTeamSaved: () => void;
+  adminMode?: boolean;
 }
 
-export function TeamOwnerView({ teams, onTeamSaved }: Props) {
+export function TeamOwnerView({ teams, onTeamSaved, adminMode = false }: Props) {
   const { address } = useAccount();
   const [tab, setTab] = useState<Tab>(teams.length > 0 ? "candidates" : "listing");
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(
     teams.length > 0 ? teams[0].id : null
   );
-  const [introRefresh, setIntroRefresh] = useState(0);
+  const [_introRefresh, setIntroRefresh] = useState(0);
   const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
   const refresh = useCallback(() => setIntroRefresh((n) => n + 1), []);
   const handleIntroSent = refresh;
+
+  // If admin mode is turned off while on an admin-only tab, fall back to candidates/listing
+  useEffect(() => {
+    if (!adminMode && (tab === "ai-rank" || tab === "zg-account")) {
+      setTab(selectedTeamId ? "candidates" : "listing");
+    }
+  }, [adminMode, tab, selectedTeamId]);
 
   const acceptedChats = loadIntros().filter(
     (i) => i.ownerWallet.toLowerCase() === address?.toLowerCase() && i.status === "accepted"
@@ -117,6 +127,25 @@ export function TeamOwnerView({ teams, onTeamSaved }: Props) {
         </li>
         <li className="nav-item">
           <button
+            className={`nav-link ${tab === "ai-rank" ? "active" : ""} ${!selectedTeam ? "disabled" : ""}`}
+            onClick={() => setTab("ai-rank")}
+            disabled={!selectedTeam}
+            hidden={!adminMode}
+          >
+            &#x2728; AI Rank
+          </button>
+        </li>
+        <li className="nav-item">
+          <button
+            className={`nav-link ${tab === "zg-account" ? "active" : ""}`}
+            onClick={() => setTab("zg-account")}
+            hidden={!adminMode}
+          >
+            &#x1fa99; 0G Account
+          </button>
+        </li>
+        <li className="nav-item">
+          <button
             className={`nav-link ${tab === "messages" ? "active" : ""}`}
             onClick={() => setTab("messages")}
           >
@@ -134,7 +163,7 @@ export function TeamOwnerView({ teams, onTeamSaved }: Props) {
 
       {tab === "candidates" && selectedTeam && (
         <CandidateList
-          key={`${selectedTeam.id}-${introRefresh}`}
+          key={selectedTeam.id}
           team={selectedTeam}
           ownerWallet={address!}
           onIntroSent={handleIntroSent}
@@ -144,6 +173,16 @@ export function TeamOwnerView({ teams, onTeamSaved }: Props) {
       {tab === "candidates" && !selectedTeam && (
         <p className="text-muted">Post a team listing first to browse candidates.</p>
       )}
+
+      {tab === "ai-rank" && selectedTeam && (
+        <AIRankingPanel key={selectedTeam.id} team={selectedTeam} />
+      )}
+
+      {tab === "ai-rank" && !selectedTeam && (
+        <p className="text-muted">Post a team listing first to use AI ranking.</p>
+      )}
+
+      {tab === "zg-account" && <ZGAccountPanel />}
 
       {tab === "messages" && (
         <div>

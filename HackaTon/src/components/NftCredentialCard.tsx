@@ -82,7 +82,7 @@ export function NftCredentialCard({ openseaUrl, compact = false, ownerWallet }: 
       <div className="d-flex align-items-center gap-2 bg-white border rounded p-2">
         {(animUrl || imageUrl) && (
           <div
-            style={{ width: 48, height: 48, borderRadius: 6, overflow: "hidden", flexShrink: 0 }}
+            style={{ width: 128, height: 128, borderRadius: 6, overflow: "hidden", flexShrink: 0 }}
           >
             {animUrl ? (
               <video

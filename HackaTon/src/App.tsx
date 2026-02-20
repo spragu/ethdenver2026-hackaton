@@ -1,14 +1,14 @@
 ﻿import { useState, useCallback } from "react";
 import { useAccount, useConnect, useDisconnect } from "wagmi";
 import type { BuilderProfile, TeamListing } from "./types";
-import { loadProfile, loadTeams } from "./storage";
+import { loadProfile, loadTeams, clearAllData } from "./storage";
 import { ApplicantView } from "./views/ApplicantView";
 import { TeamOwnerView } from "./views/TeamOwnerView";
 import { useWalletName } from "./ens";
 
 type Mode = "applicant" | "team-owner";
 
-function WalletBar() {
+function WalletBar({ adminMode, onToggleAdmin }: { adminMode: boolean; onToggleAdmin: () => void }) {
   const { address, isConnected, chain } = useAccount();
   const { connect, connectors, isPending, error } = useConnect();
   const { disconnect } = useDisconnect();
@@ -38,6 +38,34 @@ function WalletBar() {
       <span className="navbar-brand fw-bold mb-0">HackaTon</span>
       <div className="d-flex align-items-center gap-2">
         <span className="text-muted small d-none d-sm-inline">{chain?.name}</span>
+        <div className="form-check form-switch mb-0 d-flex align-items-center gap-1" title="Enable admin tools (AI ranking, 0G account)">
+          <input
+            className="form-check-input"
+            type="checkbox"
+            role="switch"
+            id="adminToggle"
+            checked={adminMode}
+            onChange={onToggleAdmin}
+            style={{ cursor: "pointer" }}
+          />
+          <label className="form-check-label small text-muted" htmlFor="adminToggle" style={{ cursor: "pointer" }}>
+            Admin
+          </label>
+        </div>
+        {adminMode && (
+          <button
+            className="btn btn-outline-danger btn-sm"
+            title="Clear all HackaTon data from localStorage for a fresh demo"
+            onClick={() => {
+              if (window.confirm("Erase ALL HackaTon data? This cannot be undone.")) {
+                clearAllData();
+                window.location.reload();
+              }
+            }}
+          >
+            ⚠ Reset Demo
+          </button>
+        )}
         <code className="badge bg-secondary" title={address}>
           {walletName}
         </code>
@@ -86,6 +114,7 @@ function ModeSelector({ mode, onSelect }: { mode: Mode | null; onSelect: (m: Mod
 export default function App() {
   const { address, isConnected } = useAccount();
   const [mode, setMode] = useState<Mode | null>(null);
+  const [adminMode, setAdminMode] = useState(false);
   const [profile, setProfile] = useState<BuilderProfile | null>(
     () => (address ? loadProfile(address) : null)
   );
@@ -96,7 +125,7 @@ export default function App() {
 
   return (
     <div className="min-vh-100 bg-light">
-      <WalletBar />
+      <WalletBar adminMode={adminMode} onToggleAdmin={() => setAdminMode((v) => !v)} />
       {isConnected && (
         <div className="container py-4" style={{ maxWidth: 800 }}>
           <ModeSelector mode={mode} onSelect={setMode} />
@@ -107,7 +136,7 @@ export default function App() {
             <ApplicantView profile={profile} teams={teams} onProfileSaved={handleProfileSaved} />
           )}
           {mode === "team-owner" && (
-            <TeamOwnerView teams={teams} onTeamSaved={handleTeamSaved} />
+            <TeamOwnerView teams={teams} onTeamSaved={handleTeamSaved} adminMode={adminMode} />
           )}
         </div>
       )}

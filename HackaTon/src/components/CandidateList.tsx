@@ -1,9 +1,51 @@
 ﻿import type { BuilderProfile, TeamListing, IntroRequest } from "../types";
-import { generateId, saveIntro, loadIntros, loadAllProfiles } from "../storage";
+import { generateId, saveIntro, loadIntros, loadAllProfiles, loadAllAIRanks, saveAIRank } from "../storage";
 import { useState } from "react";
 import { NftCredentialCard } from "./NftCredentialCard";
 import { useRecordIntroOnChain } from "../contracts";
 import { WalletName } from "./WalletName";
+import { rankCandidates } from "../0gai";
+
+interface AIRank { stars: number; reasoning: string; }
+
+/** 0–5 filled stars with a hover tooltip showing AI reasoning. */
+function StarRating({ stars, reasoning }: AIRank) {
+  const [show, setShow] = useState(false);
+  return (
+    <span
+      className="position-relative d-inline-flex align-items-center gap-1"
+      style={{ cursor: "help" }}
+      onMouseEnter={() => setShow(true)}
+      onMouseLeave={() => setShow(false)}
+    >
+      <span style={{ letterSpacing: 1, fontSize: "1.05rem", lineHeight: 1 }}>
+        {Array.from({ length: 5 }, (_, i) => (
+          <span key={i} style={{ color: i < stars ? "#f5a623" : "#ced4da" }}>&#9733;</span>
+        ))}
+      </span>
+      <small className="text-muted" style={{ fontSize: "0.7rem" }}>{stars}/5</small>
+      {show && (
+        <div
+          className="card shadow-sm"
+          style={{
+            position: "absolute",
+            bottom: "calc(100% + 6px)",
+            right: 0,
+            width: 260,
+            zIndex: 999,
+            fontSize: "0.8rem",
+            whiteSpace: "normal",
+          }}
+        >
+          <div className="card-body py-2 px-3">
+            <p className="mb-1 fw-semibold text-body">Reasoning provided by: 0G.ai</p>
+            <p className="mb-0 text-muted">{reasoning}</p>
+          </div>
+        </div>
+      )}
+    </span>
+  );
+}
 
 const availabilityVariant: Record<string, string> = {
   "full-time": "success",
@@ -46,6 +88,76 @@ export function CandidateList({ team, ownerWallet, onIntroSent }: Props) {
     () => Object.fromEntries(incomingApplications.map((i) => [i.applicantWallet.toLowerCase(), i.status]))
   );
   const [messageMap, setMessageMap] = useState<Record<string, string>>({});
+  const [aiRankings, setAiRankings] = useState<Record<string, AIRank>>(() => {
+    // Hydrate from cache
+    const cached = loadAllAIRanks(team.id);
+    const hydrated: Record<string, AIRank> = {};
+    for (const [wallet, rank] of Object.entries(cached)) {
+      hydrated[wallet] = { stars: rank.stars, reasoning: rank.reasoning };
+    }
+    return hydrated;
+  });
+  // wallets currently being evaluated by AI
+  const [aiLoadingWallets, setAiLoadingWallets] = useState<Set<string>>(new Set());
+  const [aiError, setAiError] = useState("");
+
+  function setWalletLoading(wallet: string, loading: boolean) {
+    setAiLoadingWallets((prev) => {
+      const next = new Set(prev);
+      loading ? next.add(wallet.toLowerCase()) : next.delete(wallet.toLowerCase());
+      return next;
+    });
+  }
+
+  function applyResult(wallet: string, score: number, reasoning: string) {
+    const stars = Math.min(5, Math.max(0, Math.round(score / 20)));
+    setAiRankings((prev) => ({
+      ...prev,
+      [wallet.toLowerCase()]: { stars, reasoning },
+    }));
+    // Persist to cache
+    saveAIRank(team.id, wallet, { stars, reasoning, score, cachedAt: Date.now() });
+  }
+
+  async function rankOne(candidate: BuilderProfile) {
+    setWalletLoading(candidate.wallet, true);
+    setAiError("");
+    try {
+      const results = await rankCandidates(team, [candidate]);
+      if (results[0]) {
+        applyResult(candidate.wallet, results[0].score, results[0].reasoning);
+      } else {
+        throw new Error("AI returned no result for this candidate. Check console for the raw response.");
+      }
+    } catch (e) {
+      setAiError(String(e));
+    } finally {
+      setWalletLoading(candidate.wallet, false);
+    }
+  }
+
+  async function runAiRanking() {
+    if (allCandidates.length === 0) return;
+    setAiError("");
+    // Mark all as loading immediately so spinners appear right away
+    setAiLoadingWallets(new Set(allCandidates.map((c) => c.wallet.toLowerCase())));
+    // Fire one request per candidate in parallel so each card fills in as it resolves
+    await Promise.all(
+      allCandidates.map(async (candidate) => {
+        try {
+          const results = await rankCandidates(team, [candidate]);
+          if (results[0]) applyResult(candidate.wallet, results[0].score, results[0].reasoning);
+        } catch (e) {
+          setAiError(String(e));
+        } finally {
+          setWalletLoading(candidate.wallet, false);
+        }
+      })
+    );
+  }
+
+  const anyLoading = aiLoadingWallets.size > 0;
+  const hasAiRankings = Object.keys(aiRankings).length > 0;
 
   function scoreMatch(candidate: BuilderProfile): number {
     const roleMatch = candidate.roles.filter((r) => team.requiredRoles.includes(r)).length;
@@ -53,7 +165,14 @@ export function CandidateList({ team, ownerWallet, onIntroSent }: Props) {
     return roleMatch * 3 + skillMatch;
   }
 
-  const ranked = [...allCandidates].sort((a, b) => scoreMatch(b) - scoreMatch(a));
+  const ranked = [...allCandidates].sort((a, b) => {
+    if (hasAiRankings) {
+      const aStars = aiRankings[a.wallet.toLowerCase()]?.stars ?? -1;
+      const bStars = aiRankings[b.wallet.toLowerCase()]?.stars ?? -1;
+      if (bStars !== aStars) return bStars - aStars;
+    }
+    return scoreMatch(b) - scoreMatch(a);
+  });
 
   function sendIntro(candidate: BuilderProfile) {
     const intro: IntroRequest = {
@@ -89,10 +208,25 @@ export function CandidateList({ team, ownerWallet, onIntroSent }: Props) {
 
   return (
     <div>
-      <h5 className="mb-1">Candidates for "{team.projectName}"</h5>
+      <div className="d-flex justify-content-between align-items-start mb-1">
+        <h5 className="mb-0">Candidates for "{team.projectName}"</h5>
+        <button
+          className="btn btn-sm btn-outline-warning d-flex align-items-center gap-1"
+          onClick={runAiRanking}
+          disabled={anyLoading || allCandidates.length === 0}
+          title="Use 0G AI to score each candidate and sort by fit"
+        >
+          {anyLoading
+            ? <><span className="spinner-border spinner-border-sm" /> Ranking…</>
+            : <>&#9733; AI Rank</>}
+        </button>
+      </div>
       <p className="text-muted small mb-3">
-        Ranked by match to your required roles and skills.
+        {hasAiRankings ? "Sorted by AI match score — hover a star rating for reasoning." : "Ranked by role and skill overlap. Click \"AI Rank\" for AI-powered scoring."}
       </p>
+      {aiError && (
+        <div className="alert alert-danger py-2 small mb-3">{aiError}</div>
+      )}
 
       {/* Incoming applications from builders */}
       {incomingApplications.length > 0 && (
@@ -154,7 +288,6 @@ export function CandidateList({ team, ownerWallet, onIntroSent }: Props) {
             <p className="small">Share your listing so builders can create profiles and apply.</p>
           </div>
         ) : ranked.map((candidate) => {
-          const score = scoreMatch(candidate);
           const alreadySent = sentIntros.has(candidate.wallet);
           const hasApplied = incomingWallets.has(candidate.wallet.toLowerCase());
           const roleMatches = candidate.roles.filter((r) => team.requiredRoles.includes(r));
@@ -169,9 +302,35 @@ export function CandidateList({ team, ownerWallet, onIntroSent }: Props) {
                     <small className="text-muted">{candidate.handle}</small>
                   </div>
                   <div className="d-flex gap-2 align-items-center flex-shrink-0">
-                    {score > 0 && (
-                      <span className="badge bg-primary">&#9733; {score} match</span>
-                    )}
+                    {(() => {
+                      const wallet = candidate.wallet.toLowerCase();
+                      const ai = aiRankings[wallet];
+                      const loading = aiLoadingWallets.has(wallet);
+                      if (loading) {
+                        return (
+                          <span className="d-inline-flex align-items-center gap-1 text-muted" style={{ fontSize: "0.85rem" }}>
+                            <span className="spinner-border spinner-border-sm" />
+                            <span style={{ letterSpacing: 1, color: "#ced4da" }}>&#9733;&#9733;&#9733;&#9733;&#9733;</span>
+                          </span>
+                        );
+                      }
+                      if (ai) {
+                        return <StarRating stars={ai.stars} reasoning={ai.reasoning} />;
+                      }
+                      return (
+                        <span className="d-inline-flex align-items-center gap-1">
+                          <button
+                            className="btn btn-outline-warning btn-sm py-0 px-1"
+                            style={{ fontSize: "0.75rem", lineHeight: "1.4" }}
+                            title="Evaluate with AI"
+                            disabled={anyLoading}
+                            onClick={() => rankOne(candidate)}
+                          >
+                            &#9733; Evaluate
+                          </button>
+                        </span>
+                      );
+                    })()}
                     <span className={`badge bg-${availabilityVariant[candidate.availability] ?? "secondary"}`}>
                       {candidate.availability}
                     </span>
