@@ -1,4 +1,9 @@
-﻿# HackaTon
+﻿## License
+This project is source-available for evaluation purposes only (e.g., hackathon judging).
+Copyright (c) 2026 Christopher Sprague. All rights reserved.
+See `LICENSE` for details.
+
+# HackaTon
 
 **Hackathon team formation marketplace for ETHDenver-style events.**
 
